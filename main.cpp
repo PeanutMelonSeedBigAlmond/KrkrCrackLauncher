@@ -1,7 +1,32 @@
 #include <Windows.h>
 #include <detours.h>
-#include "IniConstant.h"
 #pragma comment(lib,"detours.lib")
+
+BOOL SelectGameExecutableFile(WCHAR* fileName) {
+	WCHAR currentDirectory[256] = { 0 };
+	GetCurrentDirectory(_countof(currentDirectory), currentDirectory);
+
+	OPENFILENAME file;
+	WCHAR selectedFileName[MAX_PATH] = { 0 };
+	ZeroMemory(&file, sizeof(file));
+	file.lStructSize = sizeof(file);
+	file.hwndOwner = NULL;
+	file.lpstrFile = selectedFileName;
+	file.nMaxFile = sizeof(selectedFileName);
+	file.lpstrFilter = L"Executable File(*.exe)\0*.exe\0\0";
+	file.nFilterIndex = 1;
+	file.lpstrFileTitle = NULL;
+	file.nMaxFileTitle = 0;
+	file.lpstrInitialDir = currentDirectory;
+	file.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+	BOOL fileOpened = GetOpenFileName(&file);
+
+	if (fileOpened) {
+		CopyMemory(fileName, selectedFileName, _countof(selectedFileName));
+	}
+	return fileOpened;
+}
 
 /** 代码来源：
 * 【教程】kirikiri序列号验证盲拆笔记
@@ -10,43 +35,20 @@
 */
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd) {
-	wchar_t CommandLine[256] = { 0 };
-	GetCurrentDirectory(_countof(CommandLine), CommandLine);
-
-	// 获取ini路径
-	TCHAR fullIniName[1024] = { 0 };
-	CopyMemory(fullIniName, CommandLine, sizeof(CommandLine));
-	wcscat_s(fullIniName, _countof(fullIniName), TEXT(INI_NAME));
-
-	// 获取ini中游戏exe的名称
-	TCHAR exeName[256] = { 0 };
-	GetPrivateProfileString(
-		TEXT(GAME_CONFIG_SECTION_NAME),
-		TEXT(GAME_EXECUTABLE_NAME),
-		TEXT(""),
-		exeName,
-		_countof(exeName),
-		(const wchar_t*)fullIniName
-	);
+	WCHAR fileName[512] = { 0 };
+	BOOL success = SelectGameExecutableFile(fileName);
+	if (!success) {
+		return -1;
+	}
 
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
 	ZeroMemory(&si, sizeof(si));
 	ZeroMemory(&pi, sizeof(pi));
 	si.cb = sizeof(si);
-	wcscat_s(
-		CommandLine,
-		_countof(CommandLine),
-		TEXT("\\")
-	);
-	wcscat_s(
-		CommandLine,
-		_countof(CommandLine),
-		(const wchar_t*)exeName // 游戏主程序名称
-	);
 	DetourCreateProcessWithDllEx(
 		NULL,
-		CommandLine,
+		fileName,
 		NULL,
 		NULL,
 		FALSE,
